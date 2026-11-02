@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Offline Memory",
+    "description": "Per-session memory archive so a cleared context can reconnect instead of revive; master switch, per-session toggles, first-run full capture"
+  }
+}

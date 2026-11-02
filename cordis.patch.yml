@@ -1,0 +1,3 @@
+- insert:
+    - id: offline-memory
+      name: dsh-offline-memory
