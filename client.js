@@ -893,15 +893,19 @@ window.__ModuleLoader__.load({
           preview !== null ? h('div', { className: 'om-pre', style: { marginTop: 8 } }, preview.text || '（空，没有可注入的条目）') : null),
         h('div', { className: 'om-card', key: 'l' },
           h('table', { className: 'om-table' },
-            h('thead', null, h('tr', null, ['时间', '触发', '条数', 'token', ''].map((t, i) => h('th', { key: i }, t)))),
+            h('thead', null, h('tr', null, ['时间', '会话', '触发', '条数', 'token', ''].map((t, i) => h('th', { key: i }, t)))),
             h('tbody', null, rows.length ? rows.map((r) => h('tr', { key: r.blockHash + r.at },
               h('td', { className: 'om-dim', style: { whiteSpace: 'nowrap' } }, when(r.at)),
+              h('td', { title: r.session || '' }, (() => {
+                const s = (list || []).find((x) => x.sessionId === r.session)
+                return s ? (s.title || s.sessionId) : (r.session ? String(r.session).slice(0, 18) + '…' : '—')
+              })()),
               h('td', null, r.trigger === 'auto' ? '自动' : r.trigger),
               h('td', { className: 'om-mono' }, r.items + (r.dropped ? '（砍 ' + r.dropped + '）' : '')),
               h('td', { className: 'om-mono' }, (r.used || 0) + '/' + r.budget),
               h('td', null, h('button', { className: 'om-btn', onClick: () => view(r.blockHash) }, '看原文'), ' ',
                 h('button', { className: 'om-btn', disabled: busy, onClick: () => replay(r.blockHash) }, '重放'))))
-              : h('tr', null, h('td', { colSpan: 5, className: 'om-dim' }, '还没有注入记录。'))))),
+              : h('tr', null, h('td', { colSpan: 6, className: 'om-dim' }, '还没有注入记录。'))))),
         open ? h(Modal, { key: 'm', title: '这一次注入的完整原文', onClose: () => setOpen(null), wide: true },
           h('div', { className: 'om-pre' }, (open.block?.text || '')),
           h('div', { className: 'om-dim', style: { fontSize: 11.5, marginTop: 8 } },
