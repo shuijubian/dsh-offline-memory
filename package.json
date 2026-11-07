@@ -20,7 +20,7 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
-    "安装与使用说明.md"
+    "INSTALL.md"
   ],
   "scripts": {
     "stat": "node lib/stat.mjs",
