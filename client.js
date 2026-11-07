@@ -246,6 +246,53 @@ window.__ModuleLoader__.load({
       const [saveResult, setSaveResult] = useState(null)
       const [saveProg, setSaveProg] = useState(null)
       const [bfState, setBfState] = useState(null)
+      const [prefs, setPrefs] = useState([])
+      const [srcs, setSrcs] = useState([])
+      const MIGRATE_ITEMS = [
+        ['journal', '底层原文'], ['optimized', '优化存储'], ['vctx', '虚拟上下文'],
+        ['important', '重要会话'], ['persona', '人设'], ['pics', '图片记忆'],
+        ['prefs', '偏好库'], ['sources', '外部源（日记等）'],
+      ]
+      const [migOpen, setMigOpen] = useState(false)
+      const [migItems, setMigItems] = useState(['journal', 'optimized', 'vctx', 'important', 'persona', 'prefs', 'sources'])
+
+      const loadPrefs = async () => {
+        if (!sid) return
+        const r = await get('/prefs?session=' + encodeURIComponent(sid))
+        setPrefs(r.items || [])
+      }
+      const loadSrcs = async () => {
+        if (!sid) return
+        const r = await get('/sources?session=' + encodeURIComponent(sid))
+        setSrcs(r.items || [])
+      }
+      useEffect(() => { loadPrefs(); loadSrcs() }, [sid])
+      const addPref = async () => {
+        const t = window.prompt('添加偏好（如「喜欢猫」「讨厌加班」）')
+        if (!t || !t.trim()) return
+        const r = await post('/prefs', { action: 'add', session: sid, text: t.trim() })
+        if (r && r.why) window.alert(r.why)
+        loadPrefs()
+      }
+      const delPref = async (id) => {
+        await post('/prefs', { action: 'remove', session: sid, id })
+        loadPrefs()
+      }
+      const addSrc = async () => {
+        const p = window.prompt('外部源路径（绝对路径，或相对 .dsh 目录，如 whale-diary.md）')
+        if (!p || !p.trim()) return
+        const label = window.prompt('给这个源起个名字（如「给主人那本」）') || ''
+        await post('/sources', { action: 'add', session: sid, path: p.trim(), label, kind: '日记' })
+        loadSrcs()
+      }
+      const toggleSrc = async (s) => {
+        await post('/sources', { action: 'toggle', session: sid, id: s.id, enabled: !s.enabled })
+        loadSrcs()
+      }
+      const delSrc = async (id) => {
+        await post('/sources', { action: 'remove', session: sid, id })
+        loadSrcs()
+      }
 
       useEffect(() => { if (ov?.config) setCfg(ov.config) }, [ov])
       useEffect(() => { if (!sid && list && list.length) setSid(list[0].sessionId) }, [list])
@@ -425,18 +472,34 @@ window.__ModuleLoader__.load({
         }
         input.click()
       }
-      const doMigrate = async () => {
+      const doMigrate = () => setMigOpen(true)
+      const runMigrate = async () => {
+        if (!migItems.length) { window.alert('至少选一项要带走的内容'); return }
         let dir = ''
         if (typeof pickDir === 'function') {
           try { dir = (await pickDir()) || '' } catch { dir = '' }
         }
-        if (!dir) dir = window.prompt('存档迁移：输入输出目录（磁盘绝对路径）。智能体将在下一轮自己决定携带哪些文件和备注。', '')
+        if (!dir) dir = window.prompt('输出目录（磁盘绝对路径）', '')
         if (!dir) return
-        if (!window.confirm('把存档迁移到「' + dir + '」？智能体将在下一轮决定携带哪些外部文件（日记/图片说明/依赖说明等）并为每个写备注。')) return
-        const r = await post('/migrate', { sessionId: sid, targetDir: dir })
+        const r = await post('/migrate', { sessionId: sid, targetDir: dir, items: migItems })
         if (!r.ok) window.alert(r.why || r.error || '失败')
-        else window.alert('已设置迁移目录：' + r.targetDir + '。智能体下一轮会用 archive_migrate 工具写入文件和备注。')
+        else {
+          const labels = MIGRATE_ITEMS.filter(([k]) => migItems.includes(k)).map(([, label]) => label).join('、')
+          window.alert('已迁移到：' + r.targetDir + '\n携带：' + labels + '\n智能体下一轮会补写「迁移说明.md」。')
+          setMigOpen(false)
+        }
       }
+
+      const migModal = migOpen ? h(Modal, { title: '存档迁移：选择携带内容', onClose: () => setMigOpen(false) },
+        h('div', { className: 'om-dim', style: { marginBottom: 8 } }, '勾选要带走的项；表情包和图片默认不勾（避免版权/隐私跟着走）。'),
+        MIGRATE_ITEMS.map(([k, label]) => h('label', { key: k, className: 'om-radio', style: { marginBottom: 4 } },
+          h('input', {
+            type: 'checkbox', checked: migItems.includes(k),
+            onChange: (e) => setMigItems(e.target.checked ? [...migItems, k] : migItems.filter((x) => x !== k)),
+          }),
+          h('span', null, label))),
+        h('div', { style: { marginTop: 10, textAlign: 'right' } },
+          h('button', { className: 'om-btn', disabled: busy, onClick: runMigrate }, '选择目录并迁移'))) : null
 
       const bfPct = bfState && bfState.total > 0 ? Math.round((bfState.done / bfState.total) * 100) : 0
       const bfModal = bfState ? h(Modal, { title: bfState.kind === 'rebuild' ? '原始日志提取' : '比对底层补齐', onClose: () => { if (!bfState.running) setBfState(null) } },
@@ -676,7 +739,62 @@ window.__ModuleLoader__.load({
           : saveResult?.err ? h('div', { className: 'om-warn' }, saveResult.err)
             : h('div', null, '存档已更新。本次存档消耗 ', h('b', null, (saveResult.costTokens ?? 0) + ' token'), (saveResult.savedImages ? '，存图 ' + saveResult.savedImages + ' 张' : ''), '（托管打分 0，会话接管为估算值）。')) : null
 
-      return h('div', null, [globalCard, gridCard, wakeCard, opsCard, impCard, imgCard, impModal, imgModal, saveModal, bfModal, readModal])
+      const injectCard = h('div', { className: 'om-card', key: 'inj' },
+        h('h4', null, '注入与偏好'),
+        Field({
+          key: 'repeatInject', label: '允许重复注入',
+          hint: '关（默认）：同一条内容只注入一次（v2.1.0 行为）。开：允许同一条反复出现在注入块里。',
+          children: h('input', {
+            type: 'checkbox', checked: !!cfg.repeatInject, disabled: busy,
+            onChange: (e) => { setCfg({ ...cfg, repeatInject: e.target.checked }); saveCfg({ repeatInject: e.target.checked }) },
+          }),
+        }),
+        Field({
+          key: 'prefInject', label: '注入偏好块',
+          hint: '把「偏好库」稳定注入上下文（不参与内容去重，可校准）。',
+          children: h('input', {
+            type: 'checkbox', checked: cfg.prefInject !== false, disabled: busy,
+            onChange: (e) => { setCfg({ ...cfg, prefInject: e.target.checked }); saveCfg({ prefInject: e.target.checked }) },
+          }),
+        }),
+        Field({
+          key: 'prefCount', label: '偏好块最多几条',
+          hint: '超出按最近添加截断。',
+          children: h('input', {
+            className: 'om-num', type: 'number', value: cfg.prefCount ?? 12, disabled: busy,
+            onChange: (e) => setCfg({ ...cfg, prefCount: Number(e.target.value) }),
+            onBlur: () => saveCfg({ prefCount: cfg.prefCount }),
+          }),
+        }))
+
+      const prefsCard = h('div', { className: 'om-card', key: 'prefs' },
+        h('h4', null, '偏好库'),
+        h('div', { className: 'om-row' },
+          h('button', { className: 'om-btn', disabled: busy, onClick: addPref }, '＋ 添加偏好'),
+          h('span', { className: 'om-dim' }, '智能体也能用 prefs 工具自己增删；这份清单会稳定注入')),
+        prefs.length ? h('table', { className: 'om-table' },
+          h('thead', null, h('tr', null, ['偏好内容', '添加时间', ''].map((t, i) => h('th', { key: i }, t)))),
+          h('tbody', null, prefs.map((p) => h('tr', { key: p.id },
+            h('td', null, p.text),
+            h('td', { className: 'om-dim' }, when(p.at)),
+            h('td', null, h('button', { className: 'om-btn', disabled: busy, onClick: () => delPref(p.id) }, '删除'))))))
+          : h('div', { className: 'om-dim' }, '还没有偏好记录'))
+
+      const sourcesCard = h('div', { className: 'om-card', key: 'srcs' },
+        h('h4', null, '外部源（本会话独立）'),
+        h('div', { className: 'om-row' },
+          h('button', { className: 'om-btn', disabled: busy, onClick: addSrc }, '＋ 添加外部源'),
+          h('span', { className: 'om-dim' }, '日记等文件级来源；每个会话各自维护，互不影响')),
+        srcs.length ? h('table', { className: 'om-table' },
+          h('thead', null, h('tr', null, ['名称', '路径', '启用', ''].map((t, i) => h('th', { key: i }, t)))),
+          h('tbody', null, srcs.map((s) => h('tr', { key: s.id },
+            h('td', null, (s.label || s.kind || '外部源') + (s.private ? '（私密）' : '')),
+            h('td', { className: 'om-mono', style: { fontSize: 11.5 } }, s.path),
+            h('td', null, h('input', { type: 'checkbox', checked: s.enabled !== false, disabled: busy, onChange: () => toggleSrc(s) })),
+            h('td', null, h('button', { className: 'om-btn', disabled: busy, onClick: () => delSrc(s.id) }, '删除'))))))
+          : h('div', { className: 'om-dim' }, '本会话没有外部源'))
+
+      return h('div', null, [globalCard, wakeCard, gridCard, injectCard, opsCard, prefsCard, sourcesCard, impCard, imgCard, impModal, imgModal, saveModal, bfModal, readModal, migModal])
     }
 
     function row(name, desc, action) {
@@ -747,6 +865,57 @@ window.__ModuleLoader__.load({
         setQa(await get('/qa?session=' + encodeURIComponent(sid) + '&limit=200'))
         setQaOpen(true)
       }
+      const [stickerOpen, setStickerOpen] = useState(false)
+      const [stickers, setStickers] = useState([])
+      const [stStats, setStStats] = useState(null)
+      const [scfg, setScfg] = useState(null)
+      const loadStickers = async () => {
+        if (!sid) return
+        const r = await get('/stickers?session=' + encodeURIComponent(sid))
+        setStickers(r.items || [])
+        setStStats(r.stats || null)
+      }
+      const openStickers = async () => {
+        await loadStickers()
+        const c = await get('/config')
+        setScfg(c.config || null)
+        setStickerOpen(true)
+      }
+      const scfgSave = async (patch) => {
+        const next = { ...(scfg || {}), ...patch }
+        setScfg(next)
+        await post('/config', { config: patch })
+      }
+      const addSticker = () => {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = '.gif,.webp,.png,.jpg,.jpeg,image/*'
+        input.onchange = async (e) => {
+          const file = e.target.files && e.target.files[0]
+          if (!file) return
+          const meaning = window.prompt('这张表情包表达什么？（一句话）') || ''
+          const emo = window.prompt('情绪标签（如 无语 / 开心）') || ''
+          const scene = window.prompt('场景标签（如 被吐槽）') || ''
+          const fr = new FileReader()
+          fr.onload = async () => {
+            const r = await post('/stickers', { action: 'add', session: sid, base64: String(fr.result), meaning, tags: { 情绪: emo, 场景: scene }, source: 'human' })
+            if (!r.ok) window.alert(r.why || '添加失败')
+            else window.alert('已添加 ' + r.id + (r.dup ? '（同图去重）' : ''))
+            loadStickers()
+          }
+          fr.readAsDataURL(file)
+        }
+        input.click()
+      }
+      const stickerStatus = async (id, status) => {
+        await post('/stickers', { action: 'update', session: sid, id, status })
+        loadStickers()
+      }
+      const delSticker = async (id) => {
+        if (!window.confirm('删除这张表情包？文件会一起删掉。')) return
+        await post('/stickers', { action: 'remove', session: sid, id })
+        loadStickers()
+      }
       const recalc = async () => {
         if (!window.confirm('清空萌属性与阵营的累计值，并按 Q&A 样本重新计算？（不会删样本）')) return
         const r = await post('/traits-recalc', { sessionId: sid })
@@ -786,6 +955,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'om-row' },
           h('button', { className: 'om-btn', disabled: busy || !sid, onClick: openPersona }, '人设属性'),
           h('button', { className: 'om-btn', disabled: busy || !sid, onClick: openQa }, 'Q&A 样本记录本'),
+          h('button', { className: 'om-btn', disabled: busy || !sid, onClick: openStickers }, '表情包收录使用'),
           h('span', { className: 'om-dim' }, '人设是独立模块：人和智能体都能编辑同一份。')))
 
       const moodCard = h('div', { className: 'om-card', key: 'm' },
@@ -857,7 +1027,51 @@ window.__ModuleLoader__.load({
           h('thead', null, h('tr', null, ['时间', '来源', '分数', '样本'].map((t, i) => h('th', { key: i }, t)))),
           h('tbody', null, qaRows.length ? qaRows : h('tr', null, h('td', { colSpan: 4, className: 'om-dim' }, '还没有样本：多聊几句，或把评分器设成即时打分。'))))) : null
 
-      return h('div', null, [head, moodCard, affCard, traitCard, alignCard, personaModal, qaModal])
+      const stickerRows = (stickers || []).map((it) => h('tr', { key: it.id },
+        h('td', null, h('img', {
+          src: '/dsh-offline-memory/sticker-file?session=' + encodeURIComponent(sid) + '&id=' + encodeURIComponent(it.id),
+          style: { maxWidth: 56, maxHeight: 44, borderRadius: 4, display: 'block' }, alt: it.id,
+        })),
+        h('td', null, Object.values(it.tags || {}).filter(Boolean).slice(0, 3).map((v, i) => h('span', { className: 'om-tag', key: i }, v)), h('div', { className: 'om-dim', style: { fontSize: 11 } }, it.id)),
+        h('td', null, it.meaning || '—'),
+        h('td', null, it.status === 'ready' ? '可用' : it.status === 'retired' ? '已下架' : '待确认'),
+        h('td', null,
+          it.status !== 'ready' ? h('button', { className: 'om-btn', disabled: busy, onClick: () => stickerStatus(it.id, 'ready') }, '确认可用') : null, ' ',
+          h('button', { className: 'om-btn', 'data-danger': '1', disabled: busy, onClick: () => delSticker(it.id) }, '删除'))))
+
+      const stickerModal = stickerOpen ? h(Modal, { key: 'sm', title: '表情包收录使用', onClose: () => setStickerOpen(false), wide: true },
+        Field({
+          label: '启用表情包',
+          hint: '关掉后不注册表情包工具、不注入速查表（避免和其它插件撞名）；切换后需重载插件生效。',
+          children: h('input', {
+            type: 'checkbox', checked: scfg?.stickerEnabled !== false, disabled: busy,
+            onChange: (e) => scfgSave({ stickerEnabled: e.target.checked }),
+          }),
+        }),
+        h('div', { className: 'om-dim', style: { marginBottom: 8 } },
+          '存在本会话的 stickers/（和图片记忆 pics/ 分开）。共 ' + (stStats?.total ?? 0) + ' 张，可用 ' + (stStats?.ready ?? 0) + '，待确认 ' + (stStats?.pending ?? 0)),
+        h('div', { className: 'om-row' },
+          h('span', { className: 'om-k' }, '收录模式'),
+          h('select', {
+            className: 'om-pick', value: scfg?.stickerCollect || 'manual', disabled: busy,
+            onChange: (e) => scfgSave({ stickerCollect: e.target.value }),
+          },
+            h('option', { value: 'manual' }, '手动（只有主人能加）'),
+            h('option', { value: 'semi' }, '半自动（智能体提议，待确认）'),
+            h('option', { value: 'auto' }, '自主（智能体自己加）'))),
+        h('div', { className: 'om-row' },
+          h('span', { className: 'om-k' }, '单轮/间隔/每日'),
+          h('input', { className: 'om-num', type: 'number', value: scfg?.stickerMaxPerTurn ?? 1, disabled: busy, onChange: (e) => setScfg({ ...scfg, stickerMaxPerTurn: Number(e.target.value) }), onBlur: () => scfgSave({ stickerMaxPerTurn: scfg?.stickerMaxPerTurn }) }),
+          h('input', { className: 'om-num', type: 'number', value: scfg?.stickerMinTurns ?? 3, disabled: busy, onChange: (e) => setScfg({ ...scfg, stickerMinTurns: Number(e.target.value) }), onBlur: () => scfgSave({ stickerMinTurns: scfg?.stickerMinTurns }) }),
+          h('input', { className: 'om-num', type: 'number', value: scfg?.stickerDailyCap ?? 30, disabled: busy, onChange: (e) => setScfg({ ...scfg, stickerDailyCap: Number(e.target.value) }), onBlur: () => scfgSave({ stickerDailyCap: scfg?.stickerDailyCap }) })),
+        h('div', { className: 'om-row' },
+          h('button', { className: 'om-btn', disabled: busy, onClick: addSticker }, '＋ 添加表情包'),
+          h('span', { className: 'om-dim' }, '选图 → 填含义和标签；智能体也能用 sticker_add 按收录模式添加')),
+        h('table', { className: 'om-table' },
+          h('thead', null, h('tr', null, ['图', '标签', '含义', '状态', ''].map((t, i) => h('th', { key: i }, t)))),
+          h('tbody', null, stickerRows.length ? stickerRows : h('tr', null, h('td', { colSpan: 5, className: 'om-dim' }, '还没有表情包。'))))) : null
+
+      return h('div', null, [head, moodCard, affCard, traitCard, alignCard, personaModal, qaModal, stickerModal])
     }
 
     // ---------- 评分器设置 ----------
