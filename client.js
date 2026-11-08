@@ -250,11 +250,12 @@ window.__ModuleLoader__.load({
       const [srcs, setSrcs] = useState([])
       const MIGRATE_ITEMS = [
         ['journal', '底层原文'], ['optimized', '优化存储'], ['vctx', '虚拟上下文'],
-        ['important', '重要会话'], ['persona', '人设'], ['pics', '图片记忆'],
+        ['persona', '人设'], ['pics', '图片记忆'],
         ['prefs', '偏好库'], ['sources', '外部源（日记等）'],
+        ['graph', '实体图'], ['stickers', '表情包'],
       ]
       const [migOpen, setMigOpen] = useState(false)
-      const [migItems, setMigItems] = useState(['journal', 'optimized', 'vctx', 'important', 'persona', 'prefs', 'sources'])
+      const [migItems, setMigItems] = useState(['journal', 'optimized', 'vctx', 'persona', 'prefs', 'sources', 'graph', 'stickers'])
 
       const loadPrefs = async () => {
         if (!sid) return
@@ -764,6 +765,14 @@ window.__ModuleLoader__.load({
             className: 'om-num', type: 'number', value: cfg.prefCount ?? 12, disabled: busy,
             onChange: (e) => setCfg({ ...cfg, prefCount: Number(e.target.value) }),
             onBlur: () => saveCfg({ prefCount: cfg.prefCount }),
+          }),
+        }),
+        Field({
+          key: 'entityBoost', label: '问句实体加权',
+          hint: '问「我的狗叫什么名字」时，把「它叫多宝」这类答案抬上来；关掉则回到纯字面匹配。',
+          children: h('input', {
+            type: 'checkbox', checked: cfg.entityBoost !== false, disabled: busy,
+            onChange: (e) => { setCfg({ ...cfg, entityBoost: e.target.checked }); saveCfg({ entityBoost: e.target.checked }) },
           }),
         }))
 
