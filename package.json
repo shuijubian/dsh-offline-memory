@@ -1,7 +1,7 @@
 {
   "name": "dsh-offline-memory",
-  "version": "2.3.0",
-  "description": "外置记忆：按会话独立存档，上下文被压缩或清空后仍能接上。三层存储 + 注入去重（24h 时间窗）+ 人设指纹 + 偏好库 + 外部源（按会话，读不到会告警）+ 实体图（别名/关系/出处/有效期）+ 问句实体加权 + 图片记忆 + 表情包收录 + 存档迁移清单 + 自更新（本地 zip / GitHub）。",
+  "version": "2.3.1",
+  "description": "外置记忆：按会话独立存档，上下文被压缩或清空后仍能接上。三层存储 + 注入去重（24h 时间窗）+ 人设指纹 + 偏好库 + 外部源（按会话独立，private 不注入，读不到会告警）+ 实体图（别名/关系/出处/有效期）+ 问句实体加权 + 图片记忆 + 偏好独立预算 + 表情包收录 + 存档迁移清单 + 自更新（本地 zip / GitHub）。",
   "license": "MIT",
   "type": "module",
   "main": "lib/host.js",
@@ -27,7 +27,9 @@
     "test": "node test/smoke.mjs"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": true,

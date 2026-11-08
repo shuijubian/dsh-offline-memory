@@ -768,6 +768,15 @@ window.__ModuleLoader__.load({
           }),
         }),
         Field({
+          key: 'prefBudget', label: '偏好独立预算（token）',
+          hint: '偏好是固定项：不占上面的注入总预算，只有它自己超了这个数才会丢。默认 300。',
+          children: h('input', {
+            className: 'om-num', type: 'number', value: cfg.prefBudget ?? 300, disabled: busy,
+            onChange: (e) => setCfg({ ...cfg, prefBudget: Number(e.target.value) }),
+            onBlur: () => saveCfg({ prefBudget: cfg.prefBudget }),
+          }),
+        }),
+        Field({
           key: 'entityBoost', label: '问句实体加权',
           hint: '问「我的狗叫什么名字」时，把「它叫多宝」这类答案抬上来；关掉则回到纯字面匹配。',
           children: h('input', {
